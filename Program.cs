@@ -72,21 +72,34 @@ namespace FileRenamer
                 string? row_line;
                 string[]? row_values;
 
-                // Parse header and row data from csv file
                 string input_path = Path.Join(ruleset.path, ruleset.input_file);
+
+                if (ruleset.column_names.Length > ruleset.date_formats.Length)
+                {
+                    logger.AppendToLog($"The rule defined for renaming {input_path} has too few date formats listed");
+                    continue;
+                }
+
+                else if (ruleset.column_names.Length < ruleset.date_formats.Length)
+                {
+                    logger.AppendToLog($"The rule defined for renaming {input_path} has too many date formats listed");
+                    continue;
+                }
+
+                // Parse header and row data from csv file
                 try
                 {
                     using var reader = new StreamReader(input_path);
-                    header_line = reader.ReadLine();
 
+                    header_line = reader.ReadLine();
                     if (header_line == null)
                     {
                         return;
                     }
 
                     header_values = header_line.Split(ruleset.separator);
-                    row_line = reader.ReadLine();
 
+                    row_line = reader.ReadLine();
                     if (row_line == null)
                     {
                         return;
@@ -111,11 +124,19 @@ namespace FileRenamer
                 foreach (string column in ruleset.column_names)
                 {
                     int index = Array.IndexOf(header_values, column);
-                    if (index != -1)
+                    if (index == -1)
                     {
-                        DateTime parsed_date = DateTime.Parse(row_values[index]);
-                        found_values.Add(parsed_date);
+                        logger.AppendToLog($"The rule defined for renaming {input_path} has an invalid column name");
+                        continue;
                     }
+
+                    DateTime parsed_date = DateTime.Parse(row_values[index]);
+                    found_values.Add(parsed_date);
+                }
+
+                if (found_values.Count != ruleset.column_names.Length)
+                {
+                    continue;
                 }
 
                 // Convert the datetimes back into string using the specified format in the rules file,
@@ -133,10 +154,12 @@ namespace FileRenamer
                 }
                 catch (FormatException)
                 {
-                    logger.AppendToLog($"The rule for renaming {input_path} is invalid");
+                    logger.AppendToLog($"The rule defined for renaming {input_path} is invalid");
                     continue;
                 }
 
+                // If the ruleset specifies that the original file is replaced (in-place rename), then
+                // attempt to rename the file
                 if (ruleset.replace_original)
                 {
                     try
@@ -150,7 +173,8 @@ namespace FileRenamer
                     }
                 }
 
-                // Create a copy of the input file with the desired output name
+                // If the renaming fails or the ruleset specifies to not replace the original file, then we
+                // leave the original file untouched and create a copy with the desired name
                 try
                 {
                     File.Copy(input_path, output_path, true);
