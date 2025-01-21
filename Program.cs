@@ -22,6 +22,7 @@ namespace FileRenamer
         public required string[] column_names { get; set; }
         public required string[] date_formats { get; set; }
         public required string separator { get; set; }
+        public required bool replace_original { get; set; }
     }
 
     public class Program
@@ -136,6 +137,19 @@ namespace FileRenamer
                     continue;
                 }
 
+                if (ruleset.replace_original)
+                {
+                    try
+                    {
+                        File.Move(input_path, output_path, true);
+                        continue;
+                    }
+                    catch (IOException)
+                    {
+                        logger.AppendToLog($"There was an error renaming {input_path}, creating copy instead");
+                    }
+                }
+
                 // Create a copy of the input file with the desired output name
                 try
                 {
@@ -143,7 +157,7 @@ namespace FileRenamer
                 }
                 catch (IOException)
                 {
-                    logger.AppendToLog($"There was an error renaming {input_path}");
+                    logger.AppendToLog($"There was an error copying {input_path}");
                     continue;
                 }
             }
