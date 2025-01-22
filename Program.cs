@@ -27,6 +27,7 @@ namespace FileRenamer
         public required string separator { get; set; }
         public required string[] columns_to_delete { get; set; }
         public required bool delete_original { get; set; }
+        public required bool log_successes { get; set; }
     }
 
     public class Program
@@ -72,6 +73,12 @@ namespace FileRenamer
             foreach (Ruleset ruleset in ruleset_list)
             {
                 string input_path = Path.Join(ruleset.path, ruleset.input_file);
+
+                if (!File.Exists(input_path))
+                {
+                    logger.AppendToLog($"Could not find input file at {input_path}");
+                    continue;
+                }
 
                 if (ruleset.column_names.Length > ruleset.date_formats.Length)
                 {
@@ -143,12 +150,6 @@ namespace FileRenamer
                         continue;
                     }
                 }
-
-                catch (FileNotFoundException)
-                {
-                    logger.AppendToLog($"Could not find input file at {input_path}");
-                    continue;
-                }
                 catch (IOException)
                 {
                     logger.AppendToLog($"There was an error loading input file at {input_path}");
@@ -213,8 +214,6 @@ namespace FileRenamer
                     {
                         writer.WriteLine(line);
                     }
-
-                    logger.AppendToLog($"Successfully copied {input_path} to {output_path}");
                 }
 
                 catch (Exception ex)
@@ -226,6 +225,11 @@ namespace FileRenamer
                     }
 
                     throw;
+                }
+
+                if (ruleset.log_successes)
+                {
+                    logger.AppendToLog($"Successfully copied {input_path} to {output_path}");
                 }
 
                 if (ruleset.delete_original)
