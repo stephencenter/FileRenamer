@@ -91,7 +91,8 @@ namespace FileRenamer
                 List<string> csv_lines = new();
                 try
                 {
-                    using var reader = new StreamReader(input_path);
+                    using var filestream = new FileStream(input_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(filestream);
                     
                     List<string> current_values = new();
                     string? current_line = reader.ReadLine();
