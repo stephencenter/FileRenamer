@@ -1,4 +1,7 @@
-﻿using System.Text.Json;
+﻿using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Windows.Markup;
 
 namespace FileRenamer
 {
@@ -22,7 +25,8 @@ namespace FileRenamer
         public required string[] column_names { get; set; }
         public required string[] date_formats { get; set; }
         public required string separator { get; set; }
-        public required bool replace_original { get; set; }
+        public required string[] columns_to_delete { get; set; }
+        public required bool delete_original { get; set; }
     }
 
     public class Program
@@ -67,11 +71,6 @@ namespace FileRenamer
             // Iterate through each renamer and apply its rules to rename a specific file
             foreach (Ruleset ruleset in ruleset_list)
             {
-                string? header_line;
-                string[]? header_values;
-                string? row_line;
-                string[]? row_values;
-
                 string input_path = Path.Join(ruleset.path, ruleset.input_file);
 
                 if (ruleset.column_names.Length > ruleset.date_formats.Length)
@@ -87,30 +86,66 @@ namespace FileRenamer
                 }
 
                 // Parse header and row data from csv file
+                string[]? header_values = null;
+                string[]? row_values = null; 
+                List<string> csv_lines = new();
                 try
                 {
                     using var reader = new StreamReader(input_path);
-
-                    header_line = reader.ReadLine();
-                    if (header_line == null)
+                    
+                    List<string> current_values = new();
+                    string? current_line = reader.ReadLine();
+                    int row_number = 0;
+                    while (!string.IsNullOrWhiteSpace(current_line))
                     {
-                        return;
+                        current_values.Clear();
+                        var columns = current_line.Split(ruleset.separator);
+
+                        // Keep track of the data in the header separately
+                        if (row_number == 0 || header_values == null)
+                        {
+                            header_values = columns;
+                        }
+
+                        // Keep track of the data in the first non-header row separately
+                        if (row_number > 0 && row_values == null)
+                        {
+                            row_values = columns;
+                        }
+
+                        // You can specify which columns should be deleted in the ruleset
+                        // This allows you to use a column's data to rename the file, without 
+                        // including the column in the final .csv file
+                        for (int i = 0; i < columns.Length; i++)
+                        {
+                            if (!ruleset.columns_to_delete.Contains(header_values[i]))
+                            {
+                                current_values.Add(columns[i]);
+                            }
+                        }
+
+                        var new_line = string.Join(ruleset.separator, current_values);
+                        csv_lines.Add(new_line);
+                        current_line = reader.ReadLine();
+                        row_number++;
+                    };
+
+                    if (header_values == null)
+                    {
+                        logger.AppendToLog($"Input file at {input_path} has no header data");
+                        continue;
                     }
 
-                    header_values = header_line.Split(ruleset.separator);
-
-                    row_line = reader.ReadLine();
-                    if (row_line == null)
+                    if (row_values == null)
                     {
-                        return;
+                        logger.AppendToLog($"Input file at {input_path} has no row data");
+                        continue;
                     }
-
-                    row_values = row_line.Split(ruleset.separator);
-
                 }
+
                 catch (FileNotFoundException)
                 {
-                    logger.AppendToLog($"Could not find input file at {input_path} ");
+                    logger.AppendToLog($"Could not find input file at {input_path}");
                     continue;
                 }
                 catch (IOException)
@@ -126,11 +161,21 @@ namespace FileRenamer
                     int index = Array.IndexOf(header_values, column);
                     if (index == -1)
                     {
-                        logger.AppendToLog($"The rule defined for renaming {input_path} has an invalid column name");
+                        logger.AppendToLog($"The rule defined for renaming {input_path} has an invalid column name '{column}'");
                         continue;
                     }
 
-                    DateTime parsed_date = DateTime.Parse(row_values[index]);
+                    DateTime parsed_date;
+                    try
+                    {
+                        parsed_date = DateTime.Parse(row_values[index]);
+                    }
+                    catch (IndexOutOfRangeException)
+                    {
+                        logger.AppendToLog($"Row data for {input_path} ends before reaching required column '{column}'");
+                        continue;
+                    }
+
                     found_values.Add(parsed_date);
                 }
 
@@ -158,31 +203,44 @@ namespace FileRenamer
                     continue;
                 }
 
-                // If the ruleset specifies that the original file is replaced (in-place rename), then
-                // attempt to rename the file
-                if (ruleset.replace_original)
+                // Write the .csv data to the new filename
+                try
+                {
+                    // We have to set encoding to UTF-16 or it won't be automatically openable in Excel
+                    using StreamWriter writer = new(output_path, false, Encoding.Unicode);
+                    foreach (var line in csv_lines)
+                    {
+                        writer.WriteLine(line);
+                    }
+
+                    logger.AppendToLog($"Successfully copied {input_path} to {output_path}");
+                }
+
+                catch (Exception ex)
+                {
+                    if (ex is IOException || ex is UnauthorizedAccessException)
+                    {
+                        logger.AppendToLog($"There was an error renaming {input_path} to {output_path}");
+                        continue;
+                    }
+
+                    throw;
+                }
+
+                if (ruleset.delete_original)
                 {
                     try
                     {
-                        File.Move(input_path, output_path, true);
-                        continue;
+                        File.Delete(input_path);
                     }
+
                     catch (IOException)
                     {
-                        logger.AppendToLog($"There was an error renaming {input_path}, creating copy instead");
+                        if (File.Exists(input_path))
+                        {
+                            logger.AppendToLog($"Failed to delete leftover file {input_path} as requested by rules file");
+                        }
                     }
-                }
-
-                // If the renaming fails or the ruleset specifies to not replace the original file, then we
-                // leave the original file untouched and create a copy with the desired name
-                try
-                {
-                    File.Copy(input_path, output_path, true);
-                }
-                catch (IOException)
-                {
-                    logger.AppendToLog($"There was an error copying {input_path}");
-                    continue;
                 }
             }
         }
