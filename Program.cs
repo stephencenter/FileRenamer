@@ -1,7 +1,6 @@
-﻿using System.IO;
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
-using System.Windows.Markup;
+using System.Text.RegularExpressions;
 
 namespace FileRenamer
 {
@@ -103,23 +102,19 @@ namespace FileRenamer
                     
                     List<string> current_values = new();
                     string? current_line = reader.ReadLine();
-                    int row_number = 0;
                     while (!string.IsNullOrWhiteSpace(current_line))
                     {
                         current_values.Clear();
                         var columns = current_line.Split(ruleset.separator);
 
-                        // Keep track of the data in the header separately
-                        if (row_number == 0 || header_values == null)
+                        // Keep track of the data in the first non-header row separately
+                        if (header_values != null)
                         {
-                            header_values = columns;
+                            row_values ??= columns;
                         }
 
-                        // Keep track of the data in the first non-header row separately
-                        if (row_number > 0 && row_values == null)
-                        {
-                            row_values = columns;
-                        }
+                        // Keep track of the data in the header separately
+                        header_values ??= columns;
 
                         // You can specify which columns should be deleted in the ruleset
                         // This allows you to use a column's data to rename the file, without 
@@ -135,7 +130,6 @@ namespace FileRenamer
                         var new_line = string.Join(ruleset.separator, current_values);
                         csv_lines.Add(new_line);
                         current_line = reader.ReadLine();
-                        row_number++;
                     };
 
                     if (header_values == null)
@@ -156,33 +150,57 @@ namespace FileRenamer
                     continue;
                 }
 
-                // Get the columns specified in the renaming rule, convert them to datetimes 
-                List<DateTime> found_values = new();
-                foreach (string column in ruleset.column_names)
+                // Gather the values for each column specified in the ruleset
+                int counter = 0;
+                List<string> formatted_values = new();
+                foreach (string column_name in ruleset.column_names)
                 {
-                    int index = Array.IndexOf(header_values, column);
+                    // Find where in the .csv file data the desired column is located
+                    int index = Array.IndexOf(header_values, column_name);
+                    Console.WriteLine($"{column_name}, {index}, {row_values[index]}");
                     if (index == -1)
                     {
-                        logger.AppendToLog($"The rule defined for renaming {input_path} has an invalid column name '{column}'");
+                        logger.AppendToLog($"The rule defined for renaming {input_path} has an invalid column name '{column_name}'");
                         continue;
                     }
 
-                    DateTime parsed_date;
+                    string new_value;
                     try
                     {
-                        parsed_date = DateTime.Parse(row_values[index]);
+                        new_value = row_values[index];
                     }
                     catch (IndexOutOfRangeException)
                     {
-                        logger.AppendToLog($"Row data for {input_path} ends before reaching required column '{column}'");
+                        logger.AppendToLog($"Row data for {input_path} ends before reaching required column '{column_name}'");
                         continue;
                     }
 
-                    found_values.Add(parsed_date);
+                    if (ruleset.date_formats[counter] != null)
+                    {
+                        try
+                        {
+                            DateTime parsed_date = DateTime.Parse(new_value);
+                            formatted_values.Add(parsed_date.ToString(ruleset.date_formats[counter]));
+                        }
+                        catch (FormatException)
+                        {
+                            logger.AppendToLog($"The provided date format for {column_name} is invalid for renaming {input_path}");
+                            continue;
+
+                        }
+                    }
+                    
+                    else
+                    {
+                        formatted_values.Add(new_value);
+                    }
+
+                    counter++;
                 }
 
-                if (found_values.Count != ruleset.column_names.Length)
+                if (formatted_values.Count != ruleset.column_names.Length)
                 {
+                    logger.AppendToLog($"Failed to gather all required values for renaming {input_path}");
                     continue;
                 }
 
@@ -191,17 +209,14 @@ namespace FileRenamer
                 string output_path;
                 try
                 {
-                    string[] date_inserts = new string[found_values.Count];
-                    for (int i = 0; i < found_values.Count; i++)
-                    {
-                        date_inserts[i] = found_values[i].ToString(ruleset.date_formats[i]);
-                    }
-
-                    output_path = Path.Join(ruleset.path, string.Format(ruleset.output_file, date_inserts));
+                    string output_name = string.Format(ruleset.output_file, formatted_values.ToArray());
+                    output_name = Regex.Replace(output_name, "[\\/:*?\"<>|]", "_");
+                    output_path = Path.Join(ruleset.path, output_name);
+                    
                 }
                 catch (FormatException)
                 {
-                    logger.AppendToLog($"The rule defined for renaming {input_path} is invalid");
+                    logger.AppendToLog($"The rule defined for renaming {input_path} needs more values than were provided");
                     continue;
                 }
 
