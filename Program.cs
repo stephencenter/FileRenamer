@@ -12,7 +12,7 @@ namespace FileRenamer
         public void AppendToLog(string message)
         {
             using var stream = new StreamWriter(LogPath, true);
-            stream.WriteLine($"{DateTime.Now}: {message}");
+            stream.WriteLine($"{DateTime.Now} | {Program.VERSION_NUMBER}: {message}");
         }
     }
 
@@ -31,6 +31,8 @@ namespace FileRenamer
 
     public class Program
     {
+        public const string VERSION_NUMBER = "v1.0.0";
+
         public static void Main()
         {
             // Initialize logging
@@ -157,7 +159,6 @@ namespace FileRenamer
                 {
                     // Find where in the .csv file data the desired column is located
                     int index = Array.IndexOf(header_values, column_name);
-                    Console.WriteLine($"{column_name}, {index}, {row_values[index]}");
                     if (index == -1)
                     {
                         logger.AppendToLog($"The rule defined for renaming {input_path} has an invalid column name '{column_name}'");
@@ -220,7 +221,7 @@ namespace FileRenamer
                     continue;
                 }
 
-                // Write the .csv data to the new filename
+                // Try to write the .csv data to the new filename
                 try
                 {
                     // We have to set encoding to UTF-16 or it won't be automatically openable in Excel
