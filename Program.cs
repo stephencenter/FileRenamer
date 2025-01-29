@@ -1,6 +1,10 @@
-﻿using System.Text;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace FileRenamer
 {
@@ -11,22 +15,38 @@ namespace FileRenamer
 
         public void AppendToLog(string message)
         {
-            using var stream = new StreamWriter(LogPath, true);
-            stream.WriteLine($"{DateTime.Now} | {Program.VERSION_NUMBER}: {message}");
+            var to_write = $"{DateTime.Now} | {Program.VERSION_NUMBER}: {message}";
+            try
+            {
+                using var stream = new StreamWriter(LogPath, true);
+                stream.WriteLine(to_write);
+            }
+
+            catch (Exception ex)
+            {
+                // If we can't write to the log file, write to console instead
+                if (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    Console.WriteLine(to_write);
+                    return;
+                }
+
+                throw;
+            }
         }
     }
 
     public class Ruleset
     {
-        public required string path { get; set; }
-        public required string input_file { get; set; }
-        public required string output_file { get; set; }
-        public required string[] column_names { get; set; }
-        public required string[] date_formats { get; set; }
-        public required string separator { get; set; }
-        public required string[] columns_to_delete { get; set; }
-        public required bool delete_original { get; set; }
-        public required bool log_successes { get; set; }
+        public string path { get; set; }
+        public string input_file { get; set; }
+        public string output_file { get; set; }
+        public string[] column_names { get; set; }
+        public string[] date_formats { get; set; }
+        public string separator { get; set; }
+        public string[] columns_to_delete { get; set; }
+        public bool delete_original { get; set; }
+        public bool log_successes { get; set; }
     }
 
     public class Program
@@ -161,7 +181,7 @@ namespace FileRenamer
                     int index = Array.IndexOf(header_values, column_name);
                     if (index == -1)
                     {
-                        logger.AppendToLog($"The rule defined for renaming {input_path} has an invalid column name '{column_name}'");
+                        logger.AppendToLog($"Couldn't find column name '{column_name}' in input file {input_path}");
                         continue;
                     }
 
