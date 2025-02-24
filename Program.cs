@@ -113,116 +113,119 @@ namespace FileRenamer
                     continue;
                 }
 
-                // Parse header and row data from csv file
-                string[]? header_values = null;
-                string[]? row_values = null; 
-                List<string> csv_lines = new();
-                try
-                {
-                    using var filestream = new FileStream(input_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    using var reader = new StreamReader(filestream);
-                    
-                    List<string> current_values = new();
-                    string? current_line = reader.ReadLine();
-                    while (!string.IsNullOrWhiteSpace(current_line))
-                    {
-                        current_values.Clear();
-                        var columns = current_line.Split(ruleset.separator);
-
-                        // Keep track of the data in the first non-header row separately
-                        if (header_values != null)
-                        {
-                            row_values ??= columns;
-                        }
-
-                        // Keep track of the data in the header separately
-                        header_values ??= columns;
-
-                        // You can specify which columns should be deleted in the ruleset
-                        // This allows you to use a column's data to rename the file, without 
-                        // including the column in the final .csv file
-                        for (int i = 0; i < columns.Length; i++)
-                        {
-                            if (!ruleset.columns_to_delete.Contains(header_values[i]))
-                            {
-                                current_values.Add(columns[i]);
-                            }
-                        }
-
-                        var new_line = string.Join(ruleset.separator, current_values);
-                        csv_lines.Add(new_line);
-                        current_line = reader.ReadLine();
-                    };
-
-                    if (header_values == null)
-                    {
-                        logger.AppendToLog($"Input file at {input_path} has no header data");
-                        continue;
-                    }
-
-                    if (row_values == null)
-                    {
-                        logger.AppendToLog($"Input file at {input_path} has no row data");
-                        continue;
-                    }
-                }
-                catch (IOException)
-                {
-                    logger.AppendToLog($"There was an error loading input file at {input_path}");
-                    continue;
-                }
-
-                // Gather the values for each column specified in the ruleset
-                int counter = 0;
                 List<string> formatted_values = new();
-                foreach (string column_name in ruleset.column_names)
+                List<string> csv_lines = new();
+                if (ruleset.column_names.Length > 0)
                 {
-                    // Find where in the .csv file data the desired column is located
-                    int index = Array.IndexOf(header_values, column_name);
-                    if (index == -1)
-                    {
-                        logger.AppendToLog($"Couldn't find column name '{column_name}' in input file {input_path}");
-                        continue;
-                    }
-
-                    string new_value;
+                    // Parse header and row data from csv file
+                    string[]? header_values = null;
+                    string[]? row_values = null; 
                     try
                     {
-                        new_value = row_values[index];
+                        using var filestream = new FileStream(input_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        using var reader = new StreamReader(filestream);
+                    
+                        List<string> current_values = new();
+                        string? current_line = reader.ReadLine();
+                        while (!string.IsNullOrWhiteSpace(current_line))
+                        {
+                            current_values.Clear();
+                            var columns = current_line.Split(ruleset.separator);
+
+                            // Keep track of the data in the first non-header row separately
+                            if (header_values != null)
+                            {
+                                row_values ??= columns;
+                            }
+
+                            // Keep track of the data in the header separately
+                            header_values ??= columns;
+
+                            // You can specify which columns should be deleted in the ruleset
+                            // This allows you to use a column's data to rename the file, without 
+                            // including the column in the final .csv file
+                            for (int i = 0; i < columns.Length; i++)
+                            {
+                                if (!ruleset.columns_to_delete.Contains(header_values[i]))
+                                {
+                                    current_values.Add(columns[i]);
+                                }
+                            }
+
+                            var new_line = string.Join(ruleset.separator, current_values);
+                            csv_lines.Add(new_line);
+                            current_line = reader.ReadLine();
+                        };
+
+                        if (header_values == null)
+                        {
+                            logger.AppendToLog($"Input file at {input_path} has no header data");
+                            continue;
+                        }
+
+                        if (row_values == null)
+                        {
+                            logger.AppendToLog($"Input file at {input_path} has no row data");
+                            continue;
+                        }
                     }
-                    catch (IndexOutOfRangeException)
+                    catch (IOException)
                     {
-                        logger.AppendToLog($"Row data for {input_path} ends before reaching required column '{column_name}'");
+                        logger.AppendToLog($"There was an error loading input file at {input_path}");
                         continue;
                     }
 
-                    if (ruleset.date_formats[counter] != null)
+                    // Gather the values for each column specified in the ruleset
+                    int counter = 0;
+                    foreach (string column_name in ruleset.column_names)
                     {
+                        // Find where in the .csv file data the desired column is located
+                        int index = Array.IndexOf(header_values, column_name);
+                        if (index == -1)
+                        {
+                            logger.AppendToLog($"Couldn't find column name '{column_name}' in input file {input_path}");
+                            continue;
+                        }
+
+                        string new_value;
                         try
                         {
-                            DateTime parsed_date = DateTime.Parse(new_value);
-                            formatted_values.Add(parsed_date.ToString(ruleset.date_formats[counter]));
+                            new_value = row_values[index];
                         }
-                        catch (FormatException)
+                        catch (IndexOutOfRangeException)
                         {
-                            logger.AppendToLog($"The provided date format for {column_name} is invalid for renaming {input_path}");
+                            logger.AppendToLog($"Row data for {input_path} ends before reaching required column '{column_name}'");
                             continue;
-
                         }
-                    }
+
+                        if (ruleset.date_formats[counter] != null)
+                        {
+                            try
+                            {
+                                DateTime parsed_date = DateTime.Parse(new_value);
+                                formatted_values.Add(parsed_date.ToString(ruleset.date_formats[counter]));
+                            }
+                            catch (FormatException)
+                            {
+                                logger.AppendToLog($"The provided date format for {column_name} is invalid for renaming {input_path}");
+                                continue;
+                            }
+                        }
                     
-                    else
-                    {
-                        formatted_values.Add(new_value);
+                        else
+                        {
+                            formatted_values.Add(new_value);
+                        }
+
+                        counter++;
                     }
 
-                    counter++;
-                }
+                    if (formatted_values.Count != ruleset.column_names.Length)
+                    {
+                        logger.AppendToLog($"Failed to gather all required values for renaming {input_path}");
+                        continue;
+                    }
 
-                if (formatted_values.Count != ruleset.column_names.Length)
-                {
-                    logger.AppendToLog($"Failed to gather all required values for renaming {input_path}");
-                    continue;
                 }
 
                 // Convert the datetimes back into string using the specified format in the rules file,
@@ -241,14 +244,23 @@ namespace FileRenamer
                     continue;
                 }
 
+                
                 // Try to write the .csv data to the new filename
                 try
                 {
-                    // We have to set encoding to UTF-16 or it won't be automatically openable in Excel
-                    using StreamWriter writer = new(output_path, false, Encoding.Unicode);
-                    foreach (var line in csv_lines)
+                    if (csv_lines.Count > 0)
                     {
-                        writer.WriteLine(line);
+                        // We have to set encoding to UTF-16 or it won't be automatically openable in Excel
+                        using StreamWriter writer = new(output_path, false, Encoding.Unicode);
+                        foreach (var line in csv_lines)
+                        {
+                            writer.WriteLine(line);
+                        }
+                    }
+
+                    else
+                    {
+                        File.Move(input_path, output_path);
                     }
                 }
 
