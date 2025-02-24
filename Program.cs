@@ -244,10 +244,14 @@ namespace FileRenamer
                     continue;
                 }
 
-                if (csv_lines.Count > 0)
+                string renaming_copying = ruleset.delete_original ? "renaming" : "copying";
+                string renamed_copied = ruleset.delete_original ? "renamed" : "copied";
+
+
+                // Try to write the .csv data to the new filename
+                try
                 {
-                    // Try to write the .csv data to the new filename
-                    try
+                    if (csv_lines.Count > 0)
                     {
                         // We have to set encoding to UTF-16 or it won't be automatically openable in Excel
                         using StreamWriter writer = new(output_path, false, Encoding.Unicode);
@@ -257,62 +261,50 @@ namespace FileRenamer
                         }
                     }
 
-                    catch (Exception ex)
+                    else
                     {
-                        if (ex is IOException || ex is UnauthorizedAccessException)
+                        if (ruleset.delete_original)
                         {
-                            logger.AppendToLog($"There was an error copying {input_path} to {output_path}");
-                            continue;
+                            File.Move(input_path, output_path);
                         }
 
-                        throw;
-                    }
-
-                    if (ruleset.log_successes)
-                    {
-                        logger.AppendToLog($"Successfully copied {input_path} to {output_path}");
-                    }
-
-                    if (ruleset.delete_original)
-                    {
-                        try
+                        else
                         {
-                            File.Delete(input_path);
-                        }
-
-                        catch (IOException)
-                        {
-                            if (File.Exists(input_path))
-                            {
-                                logger.AppendToLog($"Failed to delete leftover file {input_path} as requested by rules file");
-                            }
+                            File.Copy(input_path, output_path, true);
                         }
                     }
                 }
 
-                else
+                catch (Exception ex)
+                {
+                    if (ex is IOException || ex is UnauthorizedAccessException)
+                    {
+                        logger.AppendToLog($"There was an error {renaming_copying} {input_path} to {output_path}");
+                        continue;
+                    }
+
+                    throw;
+                }
+
+                if (ruleset.log_successes)
+                {
+                    logger.AppendToLog($"Successfully {renamed_copied} {input_path} to {output_path}");
+                }
+
+                if (csv_lines.Count > 0 && ruleset.delete_original)
                 {
                     try
                     {
-                        File.Move(input_path, output_path);
+                        File.Delete(input_path);
                     }
 
-                    catch (Exception ex)
+                    catch (IOException)
                     {
-                        if (ex is IOException || ex is UnauthorizedAccessException)
+                        if (File.Exists(input_path))
                         {
-                            logger.AppendToLog($"There was an error renaming {input_path} to {output_path}");
-                            continue;
+                            logger.AppendToLog($"Failed to delete leftover file {input_path} as requested by rules file");
                         }
-
-                        throw;
                     }
-
-                    if (ruleset.log_successes)
-                    {
-                        logger.AppendToLog($"Successfully renamed {input_path} to {output_path}");
-                    }
-
                 }
             }
         }
