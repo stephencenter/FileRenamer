@@ -129,6 +129,14 @@ namespace FileRenamer
                         string? current_line = reader.ReadLine();
                         while (!string.IsNullOrWhiteSpace(current_line))
                         {
+                            // We only need data for the header and the first row, unless we're deleting columns.
+                            // Deleting columns requires us to rebuild the .csv entirely, which means we need to 
+                            // continue looping until we get all of the row data
+                            if (ruleset.columns_to_delete.Length == 0 && header_values != null && row_values != null)
+                            {
+                                break;
+                            }
+
                             current_values.Clear();
                             var columns = current_line.Split(ruleset.separator);
 
@@ -141,11 +149,11 @@ namespace FileRenamer
                             // Keep track of the data in the header separately
                             header_values ??= columns;
 
-                            // You can specify which columns should be deleted in the ruleset
-                            // This allows you to use a column's data to rename the file, without 
-                            // including the column in the final .csv file
                             for (int i = 0; i < columns.Length; i++)
                             {
+                                // You can specify which columns should be deleted in the ruleset
+                                // This allows you to use a column's data to rename the file, without 
+                                // including the column in the final .csv file
                                 if (!ruleset.columns_to_delete.Contains(header_values[i]))
                                 {
                                     current_values.Add(columns[i]);
@@ -246,10 +254,10 @@ namespace FileRenamer
                 string renaming_copying = ruleset.delete_original ? "renaming" : "copying";
                 string renamed_copied = ruleset.delete_original ? "renamed" : "copied";
 
-                // Try to write the .csv data to the new filename
+                // Try to rename file
                 try
                 {
-                    if (ruleset.columns_to_delete.Length > 0 && csv_lines.Count > 0)
+                    if (ruleset.columns_to_delete.Length > 0)
                     {
                         // We have to set encoding to UTF-16 or it won't be automatically openable in Excel
                         using StreamWriter writer = new(output_path, false, Encoding.Unicode);
@@ -289,7 +297,7 @@ namespace FileRenamer
                     logger.AppendToLog($"Successfully {renamed_copied} {input_path} to {output_path}");
                 }
 
-                if (ruleset.columns_to_delete.Length > 0 && ruleset.delete_original && csv_lines.Count > 0)
+                if (ruleset.columns_to_delete.Length > 0 && ruleset.delete_original)
                 {
                     try
                     {
