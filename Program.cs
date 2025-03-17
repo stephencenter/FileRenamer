@@ -236,7 +236,6 @@ namespace FileRenamer
                     string output_name = string.Format(ruleset.output_file, formatted_values.ToArray());
                     output_name = Regex.Replace(output_name, "[\\/:*?\"<>|]", "_");
                     output_path = Path.Join(ruleset.path, output_name);
-                    
                 }
                 catch (FormatException)
                 {
@@ -247,11 +246,10 @@ namespace FileRenamer
                 string renaming_copying = ruleset.delete_original ? "renaming" : "copying";
                 string renamed_copied = ruleset.delete_original ? "renamed" : "copied";
 
-
                 // Try to write the .csv data to the new filename
                 try
                 {
-                    if (csv_lines.Count > 0)
+                    if (ruleset.columns_to_delete.Length > 0 && csv_lines.Count > 0)
                     {
                         // We have to set encoding to UTF-16 or it won't be automatically openable in Excel
                         using StreamWriter writer = new(output_path, false, Encoding.Unicode);
@@ -291,7 +289,7 @@ namespace FileRenamer
                     logger.AppendToLog($"Successfully {renamed_copied} {input_path} to {output_path}");
                 }
 
-                if (csv_lines.Count > 0 && ruleset.delete_original)
+                if (ruleset.columns_to_delete.Length > 0 && ruleset.delete_original && csv_lines.Count > 0)
                 {
                     try
                     {
